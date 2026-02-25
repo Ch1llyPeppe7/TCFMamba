@@ -1,0 +1,90 @@
+gpu_id: '2'
+log_wandb: false
+logging:
+  level: DEBUG
+
+
+embedding_size: 64              # (int) The number of features in the hidden state.
+inner_size: 256                 # (int) The inner hidden size in feed-forward layer.
+n_layers: 2                     # (int) The number of transformer layers in transformer encoder.
+n_heads: 2                      # (int) The number of attention heads for multi-head attention layer.
+hidden_dropout_prob: 0.5        # (float) The probability of an element to be zeroed.
+attn_dropout_prob: 0.5          # (float) The probability of an attention score to be zeroed.
+hidden_act: gelu                # (str) The activation function in feed-forward layer.
+layer_norm_eps: 1e-12           # (float) A value added to the denominator for numerical stability.
+initializer_range: 0.02         # (float) The standard deviation for normal initialization.
+loss_type: CE                   # (str) The type of loss function. Range in [CE, BPR].
+dnn_type: trm                   # (str) The type of DNN. Range in [trm, ave].
+
+sess_dropout: 0.2               # (float) The probability of item embeddings in a session to be zeroed.
+item_dropout: 0.2               # (float) The probability of candidate item embeddings to be zeroed.
+temperature: 0.07               # (float) Temperature for contrastive loss.
+
+checkpoint_dir: 'SavedData'
+save_dataloaders: False
+dataloaders_save_path: ''  
+save_dataset: True         
+dataset: gowalla
+dataset_save_path: 'SavedData/gowalla.pth' 
+seed: 42  
+train_neg_sample_args:  null
+
+
+#Dataset Settings
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+TIME_FIELD: timestamp
+LABEL_FIELD: label
+
+load_col:
+    inter: [user_id, venue_id,timestamp]
+    item: [venue_id,latitude, longitude]
+
+LIST_SUFFIX: "_list"
+MAX_ITEM_LIST_LENGTH: 128
+ITEM_LIST_LENGTH_FIELD: venue_seq_len
+
+
+
+Use_CustomDataset: True  
+Use_CustomSampler: False
+repeatable: True  
+NEG_PREFIX: "neg_"
+
+
+
+# training settings
+epochs: 40
+train_batch_size: 4096
+learner: adam
+learning_rate: 0.001
+eval_step: 1
+stopping_step: 4
+single_spec: True
+train_neg_sample_args: ~ #CE
+
+eval_args:
+  order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.2]
+  gourp_by: user_id
+  max_seq_len: 128 
+  mode:
+    val: full
+    test: full
+
+
+
+# evalution settings
+
+metrics: ['Recall', 'MRR','NDCG','ItemCoverage','AveragePopularity','TailPercentage']
+valid_metric: NDCG@10
+eval_batch_size: 4096
+weight_decay: 0
+topk: [1,5,10,20]
+tail_ratio: 0.15
+
+
+
+
+

@@ -1,0 +1,71 @@
+# TCFMamba Conda Environment Configuration
+# Usage: conda env create -f environment.yml
+
+name: tcfmamba
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version
+  - python=3.10
+
+  # CUDA Toolkit (for GPU support)
+  # Adjust version based on your CUDA: 11.8, 12.1, or 12.4
+  - cudatoolkit=11.8
+
+  # Core scientific computing
+  - numpy>=1.24.0
+  - pandas>=2.0.0
+  - scipy>=1.10.0
+  - scikit-learn>=1.3.0
+
+  # Visualization
+  - matplotlib>=3.7.0
+  - seaborn>=0.13.0
+
+  # Utilities
+  - pyyaml>=6.0
+  - tqdm>=4.66.0
+  - tabulate>=0.9.0
+
+  # pip for remaining packages
+  - pip>=23.0
+
+  - pip:
+    # PyTorch with CUDA (matching cudatoolkit version)
+    # For CUDA 11.8
+    - torch>=2.0.0
+    - torchvision
+    - torchaudio
+
+    # Recommendation Framework
+    - recbole>=1.2.0
+
+    # Data processing
+    - einops>=0.7.0
+
+    # Logging & Experiment Tracking
+    - tensorboard>=2.14.0
+    - wandb>=0.16.0
+
+    # Mamba SSM dependencies
+    # ============================================
+    # OPTION 1: Linux/macOS - Direct install from PyPI
+    # These will work on Linux and macOS
+    - causal-conv1d>=1.1.0  # Linux/macOS only from PyPI
+    - mamba-ssm>=1.1.0      # Linux/macOS only from PyPI
+
+    # ============================================
+    # OPTION 2: Windows - Community prebuilt wheels
+    # Uncomment and use if on Windows (see WINDOWS_INSTALL.md)
+    # --find-links https://github.com/FuouM/mamba-ssm-windows-builds/releases
+    # causal-conv1d==1.1.1  # Windows wheel
+    # mamba-ssm==2.2.2      # Windows wheel
+
+    # ============================================
+    # OPTION 3: Alternative Windows wheels from HuggingFace
+    # Uncomment for Windows with specific Python version
+    # Requires: Python 3.10 or 3.11, CUDA 11.8 or 12.1
+    # See WINDOWS_INSTALL.md for detailed instructions

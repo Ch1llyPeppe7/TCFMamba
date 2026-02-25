@@ -1,0 +1,83 @@
+# TCFMamba Configuration for Foursquare Tokyo (TKY) Dataset
+# Trajectory Collaborative Filtering Mamba for Debiased POI Recommendation
+
+# GPU Settings
+gpu_id: '0'
+
+# Model Architecture
+model: TCFMamba
+hidden_size: 64              # Embedding dimension
+num_layers: 2                # Number of PSMN layers
+dropout_prob: 0.2            # Dropout rate
+loss_type: 'CE'              # Loss type: 'CE' (CrossEntropy) or 'BPR'
+
+# Mamba SSM Parameters
+d_state: 32                  # SSM state expansion factor
+d_conv: 4                    # Local convolution width
+expand: 2                    # Block expansion factor
+
+# Time Encoding
+Term: 'day'                  # Period type: 'day', 'week', or 'month'
+
+# Location Fields (auto-detected if not specified)
+LATITUDE_FIELD: latitude
+LONGITUDE_FIELD: longitude
+
+# Dataset Settings
+dataset: foursquare_TKY
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+TIME_FIELD: timestamp
+LABEL_FIELD: label
+
+# Load Columns
+load_col:
+  inter: [user_id, venue_id, timestamp]
+  item: [venue_id, latitude, longitude]
+
+# Sequential Data Settings
+LIST_SUFFIX: "_list"
+MAX_ITEM_LIST_LENGTH: 128
+ITEM_LIST_LENGTH_FIELD: venue_seq_len
+repeatable: True
+
+# Training Settings
+epochs: 100
+train_batch_size: 4096
+learner: adam
+learning_rate: 0.001
+weight_decay: 0
+eval_step: 1
+stopping_step: 4
+single_spec: True
+
+# Negative Sampling (set to null for CE loss)
+train_neg_sample_args: ~
+
+# Evaluation Settings
+eval_args:
+  order: TO
+  split:
+    RS: [0.7, 0.1, 0.2]
+  group_by: user_id
+  max_seq_len: 128
+  mode:
+    val: full
+    test: full
+
+# Metrics
+metrics: ['Recall', 'MRR', 'NDCG', 'ItemCoverage', 'AveragePopularity', 'TailPercentage']
+valid_metric: NDCG@10
+topk: [1, 5, 10, 20]
+tail_ratio: 0.15
+eval_batch_size: 4096
+
+# Checkpoint & Logging
+checkpoint_dir: 'saved'
+save_dataloaders: True
+save_dataset: True
+log_wandb: False
+
+# Reproducibility
+seed: 42
+reproducibility: True
