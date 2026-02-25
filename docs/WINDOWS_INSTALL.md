@@ -1,9 +1,11 @@
 # Windows Installation Guide for TCFMamba
 
+> **Python 版本**: Windows 预编译 wheel 仅支持 **Python 3.10**（文件名 `cp310-cp310`），暂不支持 3.8/3.9。
+
 ## Prerequisites
 
 - Windows 10/11 (64-bit) + NVIDIA GPU
-- Python 3.10/3.11 + CUDA 11.8/12.1
+- **Python 3.10** + CUDA 11.8/12.1
 
 ## Quick Install
 

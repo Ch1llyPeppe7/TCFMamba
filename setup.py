@@ -57,13 +57,11 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
     install_requires=core_requirements,
     extras_require={
         "linux": [
@@ -83,7 +81,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "tcfmamba-train=scripts.train:main",
+            "tcfmamba-train=utils.train:main",
         ],
     },
     include_package_data=True,

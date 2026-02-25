@@ -1,6 +1,6 @@
 # 🚀 TCFMamba：Trajectory Collaborative Filtering Mamba for Debiased POI Recommendation
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0+-red.svg)](https://pytorch.org/)
 [![RecBole](https://img.shields.io/badge/RecBole-1.2+-green.svg)](https://recbole.io/)
 [![CIKM 2025](https://img.shields.io/badge/CIKM-2025-orange.svg)](https://doi.org/10.1145/3746252.3761175)
@@ -40,8 +40,12 @@ cd TCFMamba
 conda env create -f environment.yml
 conda activate tcfmamba
 
-# Or use pip
-pip install -r requirements.txt
+# Install TCFMamba package (important!)
+pip install -e .
+
+# Or use pip without conda
+# pip install -r requirements.txt
+# pip install -e .
 ```
 
 ### Platform-Specific Instructions
@@ -52,7 +56,7 @@ pip install -r requirements.txt
 
 ### Prerequisites
 
-- **Python**: 3.8 - 3.11
+- **Python**: 3.10 (推荐，已在 Windows/Linux 测试通过)
 - **CUDA**: 11.8 or 12.1 (for GPU)
 - **PyTorch**: 2.0+
 
@@ -68,6 +72,26 @@ pip install -r requirements.txt
 **Note for Windows Users**: mamba-ssm requires prebuilt wheels on Windows. See [docs/WINDOWS_INSTALL.md](docs/WINDOWS_INSTALL.md) for detailed instructions and download links.
 
 ## 🚀 Quick Start
+
+### 0️⃣ Quick Test (Verify Installation)
+
+Before full training, run a quick test to verify everything works:
+
+```bash
+# Linux/macOS
+./scripts/quick_test.sh cpu    # CPU mode (no CUDA required)
+./scripts/quick_test.sh gpu    # GPU mode (requires CUDA)
+
+# Windows (PowerShell)
+.\scripts\quick_test.ps1 -device cpu    # CPU mode
+.\scripts\quick_test.ps1 -device gpu  # GPU mode
+```
+
+This will:
+- ✅ Check environment (Python, PyTorch, TCFMamba)
+- ✅ Verify dataset structure
+- ✅ Run 1-epoch minimal training test
+- ✅ Report any issues
 
 ### 1️⃣ Train TCFMamba on a Single Dataset
 
@@ -148,7 +172,9 @@ TCFMamba/
 │   └── prepare_datasets.py      # Dataset preparation helper
 ├── scripts/                     # Shell scripts
 │   ├── quick_start.sh           # Linux quick start
-│   └── quick_start.ps1          # Windows quick start
+│   ├── quick_start.ps1          # Windows quick start
+│   ├── quick_test.sh            # Linux/macOS test pipeline
+│   └── quick_test.ps1           # Windows test pipeline
 ├── dataset/                     # Datasets (following RecBole SOP)
 │   ├── gowalla/
 │   │   ├── gowalla.inter        # User-POI interactions

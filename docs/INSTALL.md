@@ -2,6 +2,8 @@
 
 Installation guide for Linux, macOS, and Windows.
 
+> **Python Version**: 推荐使用 Python 3.10（已在 Windows/Linux 测试通过）。Linux 也支持 3.10-3.11，Windows 预编译 wheel 主要为 3.10。
+
 ## Quick Start (Conda - Recommended)
 
 ```bash
@@ -11,9 +13,44 @@ cd TCFMamba
 conda env create -f environment.yml
 conda activate tcfmamba
 
+# Install TCFMamba package (important!)
+pip install -e .
+
 # Verify
 python -c "from tcfmamba import TCFMamba; print('✓ TCFMamba ready')"
 ```
+
+## Alternative: Pip Install
+
+If you prefer not to use Conda, you can install directly with pip:
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/TCFMamba.git
+cd TCFMamba
+
+# Create virtual environment (optional but recommended)
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install TCFMamba package
+pip install -e .
+```
+
+## About `setup.py`
+
+The `setup.py` script enables pip installation of the TCFMamba package:
+
+- **`pip install -e .`** - Editable install (recommended for development)
+- **`pip install .`** - Standard install
+- **`pip install -e .[linux]`** - Install with Linux-specific dependencies (mamba-ssm)
+- **`pip install -e .[dev]`** - Install with development tools (pytest, black, etc.)
+
+This makes the `tcfmamba` Python package available in your environment.
 
 ## Platform-Specific Installation
 

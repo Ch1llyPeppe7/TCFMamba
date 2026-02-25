@@ -79,22 +79,22 @@ def verify_dataset(dataset_name: str) -> dict:
     result = {"name": dataset_name, "exists": False, "valid": False}
     
     if not dataset_dir.exists():
-        print(f"❌ Dataset directory not found: {dataset_dir}")
+        print(f"[FAIL] Dataset directory not found: {dataset_dir}")
         return result
     
     result["exists"] = True
     inter_file = dataset_dir / f"{dataset_name}.inter"
     item_file = dataset_dir / f"{dataset_name}.item"
     
-    print(f"\n📊 Verifying {dataset_name}...")
+    print(f"\n[VERIFY] Verifying {dataset_name}...")
     print(f"   Directory: {dataset_dir.absolute()}")
     
     if not inter_file.exists():
-        print(f"   ❌ Missing: {inter_file.name}")
+        print(f"   [FAIL] Missing: {inter_file.name}")
         return result
     
     if not item_file.exists():
-        print(f"   ❌ Missing: {item_file.name}")
+        print(f"   [FAIL] Missing: {item_file.name}")
         return result
     
     # Try to read and validate
@@ -114,17 +114,17 @@ def verify_dataset(dataset_name: str) -> dict:
         missing_item = required_item - item_cols
         
         if missing_inter:
-            print(f"   ⚠️  Missing interaction columns: {missing_inter}")
+            print(f"   [WARN]  Missing interaction columns: {missing_inter}")
         if missing_item:
-            print(f"   ⚠️  Missing item columns: {missing_item}")
+            print(f"   [WARN]  Missing item columns: {missing_item}")
         
-        print(f"   ✅ Interactions: {len(inter_df):,} records")
-        print(f"   ✅ POIs: {len(item_df):,} items")
-        print(f"   ✅ Users: {inter_df['user_id:token'].nunique():,}")
+        print(f"   [OK] Interactions: {len(inter_df):,} records")
+        print(f"   [OK] POIs: {len(item_df):,} items")
+        print(f"   [OK] Users: {inter_df['user_id:token'].nunique():,}")
         
         # Check if latitude/longitude exists
         if 'latitude:float' in item_cols and 'longitude:float' in item_cols:
-            print(f"   ✅ Geographic coordinates available")
+            print(f"   [OK] Geographic coordinates available")
         
         result["valid"] = True
         result["stats"] = {
@@ -134,7 +134,7 @@ def verify_dataset(dataset_name: str) -> dict:
         }
         
     except Exception as e:
-        print(f"   ❌ Error reading dataset: {e}")
+        print(f"   [FAIL] Error reading dataset: {e}")
     
     return result
 
@@ -143,7 +143,7 @@ def print_download_instructions(dataset_name: str):
     """Print instructions for downloading and converting datasets."""
     instructions = {
         "gowalla": """
-📥 Gowalla Dataset Download & Conversion:
+[INFO] Gowalla Dataset Download & Conversion:
 
 1. Download from: https://snap.stanford.edu/data/loc-gowalla.html
    Files: loc-gowalla_totalCheckins.txt.gz
@@ -162,7 +162,7 @@ def print_download_instructions(dataset_name: str):
    Docs: https://github.com/RUCAIBox/RecSysDatasets/tree/master/conversion_tools/usage
         """,
         "foursquare_TKY": """
-📥 Foursquare Tokyo Dataset Download & Conversion:
+[INFO] Foursquare Tokyo Dataset Download & Conversion:
 
 1. Download from: https://archive.org/details/201309_foursquare_dataset_umn
    File: dataset_TSMC2014_TKY.csv
@@ -179,7 +179,7 @@ def print_download_instructions(dataset_name: str):
 3. Copy output files to dataset/foursquare_TKY/
         """,
         "foursquare_NYC": """
-📥 Foursquare NYC Dataset Download & Conversion:
+[INFO] Foursquare NYC Dataset Download & Conversion:
 
 1. Download from: https://archive.org/details/201309_foursquare_dataset_umn
    File: dataset_TSMC2014_NYC.csv
@@ -208,7 +208,7 @@ def create_dataset_structure():
         dataset_dir = Path(f"dataset/{dataset}")
         dataset_dir.mkdir(parents=True, exist_ok=True)
     
-    print("✅ Created dataset directory structure")
+    print("[OK] Created dataset directory structure")
     print("   dataset/")
     print("   ├── gowalla/")
     print("   ├── foursquare_TKY/")
@@ -225,7 +225,7 @@ def main():
     
     # Verify mode
     if args.verify:
-        print("\n🔍 Verifying existing datasets...")
+        print("\n[VERIFY] Verifying existing datasets...")
         
         datasets = ["gowalla", "foursquare_TKY", "foursquare_NYC"]
         all_valid = True
@@ -237,10 +237,10 @@ def main():
         
         print("\n" + "=" * 60)
         if all_valid:
-            print("✅ All datasets are ready!")
+            print("[OK] All datasets are ready!")
         else:
-            print("⚠️  Some datasets are missing or invalid.")
-            print("   Run: python scripts/prepare_datasets.py --dataset <name>")
+            print("[WARN] Some datasets are missing or invalid.")
+            print("   Run: python utils/prepare_datasets.py --dataset <name>")
         
         return
     
@@ -255,13 +255,13 @@ def main():
             datasets = [args.dataset]
         
         for dataset in datasets:
-            print(f"\n📦 Checking {dataset}...")
+            print(f"\n[CHECK] Checking {dataset}...")
             
             if check_dataset_exists(dataset):
-                print(f"   ✅ Dataset already exists!")
+                print(f"   [OK] Dataset already exists!")
                 verify_dataset(dataset)
             else:
-                print(f"   ⚠️  Dataset not found in RecBole format")
+                print(f"   [WARN] Dataset not found in RecBole format")
                 print_download_instructions(dataset)
     
     print("\n" + "=" * 60)

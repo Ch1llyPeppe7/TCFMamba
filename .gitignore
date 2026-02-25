@@ -5,3 +5,4 @@ prompt.md
 *.csv
 *.inter
 *.item
+*.pyc

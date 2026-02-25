@@ -1,5 +1,8 @@
 # TCFMamba Conda Environment Configuration
 # Usage: conda env create -f environment.yml
+#
+# NOTE: Python 3.10 is required (Windows prebuilt wheels only support 3.10)
+# Windows users: Install mamba-ssm separately after conda env creation (see below)
 
 name: tcfmamba
 channels:
@@ -8,7 +11,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  # Python version
+  # Python version (3.10 required for Windows compatibility)
   - python=3.10
 
   # CUDA Toolkit (for GPU support)
@@ -23,7 +26,7 @@ dependencies:
 
   # Visualization
   - matplotlib>=3.7.0
-  - seaborn>=0.13.0
+  - seaborn>=3.0.0
 
   # Utilities
   - pyyaml>=6.0
@@ -50,22 +53,15 @@ dependencies:
     - tensorboard>=2.14.0
     - wandb>=0.16.0
 
-    # Mamba SSM dependencies
-    # ============================================
-    # OPTION 1: Linux/macOS - Direct install from PyPI
-    # These will work on Linux and macOS
-    - causal-conv1d>=1.1.0  # Linux/macOS only from PyPI
-    - mamba-ssm>=1.1.0      # Linux/macOS only from PyPI
-
-    # ============================================
-    # OPTION 2: Windows - Community prebuilt wheels
-    # Uncomment and use if on Windows (see WINDOWS_INSTALL.md)
-    # --find-links https://github.com/FuouM/mamba-ssm-windows-builds/releases
-    # causal-conv1d==1.1.1  # Windows wheel
-    # mamba-ssm==2.2.2      # Windows wheel
-
-    # ============================================
-    # OPTION 3: Alternative Windows wheels from HuggingFace
-    # Uncomment for Windows with specific Python version
-    # Requires: Python 3.10 or 3.11, CUDA 11.8 or 12.1
-    # See WINDOWS_INSTALL.md for detailed instructions
+    # =====================================================
+    # Mamba SSM Installation (Platform-Specific)
+    # =====================================================
+    # OPTION 1: Linux/macOS - Uncomment these lines:
+    # - causal-conv1d>=1.1.0
+    # - mamba-ssm>=1.1.0
+    #
+    # OPTION 2: Windows - DO NOT use this section.
+    # Install manually AFTER conda env creation (see WINDOWS_INSTALL.md):
+    #   pip install https://huggingface.co/.../causal_conv1d-...-cp310-cp310-win_amd64.whl
+    #   pip install https://huggingface.co/.../mamba_ssm-...-cp310-cp310-win_amd64.whl
+    # =====================================================
