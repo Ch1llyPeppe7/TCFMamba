@@ -14,6 +14,17 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
+
+# PyTorch 2.6+ 默认 weights_only=True，RecBole 的 checkpoint 含自定义对象需 weights_only=False
+def _patch_torch_load():
+    _orig = torch.load
+    def _load(*args, **kwargs):
+        if "weights_only" not in kwargs:
+            kwargs["weights_only"] = False
+        return _orig(*args, **kwargs)
+    torch.load = _load
+_patch_torch_load()
+
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
 from recbole.utils import init_logger, init_seed, set_color, get_model, get_environment
@@ -85,18 +96,24 @@ def _patch_recbole_numpy_writable():
 
 
 def _build_run_name_and_paths(config, model_name):
-    """根据 RUN_ID、dataset、batch、关键超参 构建 run_name 及保存路径，写入 config。"""
+    """根据数据集、模型、超参构建 run_name（用于 checkpoint 与 TensorBoard 显示），写入 config。"""
     fcd = config.final_config_dict
     run_id = (fcd.get("RUN_ID") or "default").strip()
     dataset = config["dataset"]
-    train_bs = fcd["train_batch_size"] if "train_batch_size" in fcd else 2048
-    eval_bs = fcd["eval_batch_size"] if "eval_batch_size" in fcd else 2048
-    parts = [run_id, dataset, "bs%d" % train_bs, "ebs%d" % eval_bs]
+    train_bs = fcd.get("train_batch_size", 2048)
+    lr = fcd.get("learning_rate")
+    lr_str = ("%.0e" % lr).replace(".", "") if lr is not None else ""
+    parts = [run_id, dataset, model_name, "bs%d" % train_bs]
+    if lr_str:
+        parts.append("lr%s" % lr_str)
     if model_name == "TCFMamba":
         h = fcd.get("hidden_size")
         L = fcd.get("num_layers")
         if h is not None and L is not None:
             parts.append("h%dL%d" % (int(h), int(L)))
+    epochs = fcd.get("epochs")
+    if epochs is not None:
+        parts.append("ep%d" % int(epochs))
     run_name = "_".join(str(p) for p in parts)
     run_name = run_name.replace("/", "-").replace(" ", "_")
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -149,7 +166,7 @@ def get_args():
     p.add_argument("--checkpoint", default=None)
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--learning_rate", type=float, default=None)
-    p.add_argument("--gpu_id", default=None)
+    p.add_argument("--gpu_id", default=None, help="GPU IDs, e.g. '0' or '0,1'. If not set and multiple GPUs exist, all are used.")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--tensorboard", action="store_true", help="Enable TensorBoard (overrides experiment config)")
     p.add_argument("--wandb", action="store_true")
@@ -169,6 +186,8 @@ def train(model_name, dataset_name, config_file_list, args):
         config_dict["learning_rate"] = args.learning_rate
     if args.gpu_id is not None:
         config_dict["gpu_id"] = args.gpu_id
+    elif torch.cuda.is_available() and torch.cuda.device_count() > 1:
+        config_dict["gpu_id"] = ",".join(str(i) for i in range(torch.cuda.device_count()))
     if args.seed is not None:
         config_dict["seed"] = args.seed
     if args.tensorboard:
@@ -212,6 +231,14 @@ def train(model_name, dataset_name, config_file_list, args):
         model = TCFMamba(config, train_data.dataset).to(config["device"])
     else:
         model = get_model(model_name)(config, train_data.dataset).to(config["device"])
+    n_gpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    if n_gpu > 1:
+        model = torch.nn.DataParallel(model)
+        # RecBole trainer 通过 self.model.xxx 调用，DataParallel 不会转发自定义方法，需绑定到内层 model
+        for attr in ("calculate_loss", "predict", "full_sort_predict", "other_parameter", "load_other_parameter", "save_model", "load_model"):
+            if hasattr(model.module, attr):
+                setattr(model, attr, getattr(model.module, attr))
+        logger.info("Using DataParallel on %d GPUs: %s", n_gpu, config.final_config_dict.get("gpu_id", ""))
     logger.info(model)
 
     TrainerClass = TCFMambaTrainer if model_name == "TCFMamba" else __import__("recbole.trainer", fromlist=["Trainer"]).Trainer

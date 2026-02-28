@@ -100,7 +100,7 @@ def prepare(name):
         path = download_url(url, dataset_path)
         basename = os.path.splitext(os.path.basename(path))[0]
         extract_zip(path, dataset_path)
-        os.unlink(path)
+        # 保留下载的 zip，不删除
         rename_atomic_files(dataset_path, basename, recbole_name)
         print("   Download done.")
 
@@ -124,6 +124,8 @@ def prepare(name):
         item_path = dst_dir / f"{name}.item"
         if inter_path.exists() and not item_path.exists():
             _build_item_from_inter(inter_path, item_path, name)
+        if item_path.exists():
+            _ensure_item_header_venue_id(item_path)
 
         print(f"   [OK] {name} ready")
         return True
@@ -135,10 +137,32 @@ def prepare(name):
         return False
 
 
+def _ensure_item_header_venue_id(item_path):
+    """若 .item 表头是 item_id，改为 venue_id，以便 config 使用 ITEM_ID_FIELD: venue_id。仅改表头不改数据。"""
+    with open(item_path, "r", encoding="utf-8") as f:
+        first = f.readline()
+    if "item_id" not in first or "venue_id" in first:
+        return
+    first = first.replace("item_id", "venue_id")
+    with open(item_path, "r", encoding="utf-8") as f:
+        f.readline()
+        rest = f.read()
+    with open(item_path, "w", encoding="utf-8") as f:
+        f.write(first)
+        f.write(rest)
+    print(f"   [{item_path.name}] header: item_id -> venue_id")
+
+
 def _build_item_from_inter(inter_path, item_path, name):
-    """Build .item from .inter when lat/lon are in inter (e.g. RecBole merged)."""
+    """Build .item from .inter when lat/lon are in inter (e.g. RecBole merged). 保留原字段名（item_id 或 venue_id）。"""
     df = pd.read_csv(inter_path, sep="\t")
-    id_col = "item_id:token" if "item_id:token" in df.columns else "item_id"
+    id_col = None
+    for c in ["item_id:token", "venue_id:token", "item_id", "venue_id"]:
+        if c in df.columns:
+            id_col = c
+            break
+    if id_col is None:
+        raise ValueError(f"inter file has no item_id or venue_id column: {list(df.columns)}")
     lat_col = "latitude:float" if "latitude:float" in df.columns else "latitude"
     lon_col = "longitude:float" if "longitude:float" in df.columns else "longitude"
     item_df = df.groupby(id_col, as_index=False).agg({lat_col: "first", lon_col: "first"})
@@ -149,6 +173,9 @@ def _build_item_from_inter(inter_path, item_path, name):
 def prepare_if_needed(name):
     """Called by train.py before training."""
     if check_exists(name):
+        item_path = Path(f"dataset/{name}/{name}.item")
+        if item_path.exists():
+            _ensure_item_header_venue_id(item_path)
         return True
     return prepare(name)
 

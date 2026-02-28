@@ -6,8 +6,7 @@ log_wandb: False
 experiment_name: default
 show_progress: True
 
-# 用于构建保存目录与日志/Tenso
-rBoard 子目录，便于区分不同 run（如 v1, gowalla_bpr）
+# 用于构建保存目录与日志/TensorBoard 子目录，便于区分不同 run（如 v1, gowalla_bpr）
 RUN_ID: default
 
 # 写入 TensorBoard 的验证指标（不填则写入 valid_result 中全部）
@@ -15,3 +14,4 @@ monitoring_metrics: ['Recall@5', 'Recall@10', 'Recall@20', 'MRR@5', 'MRR@10', 'M
 
 # 超参字典，便于批量实验与命名（可被 run 命名引用）
 hparams: {}
+gpu_id: '0,1'

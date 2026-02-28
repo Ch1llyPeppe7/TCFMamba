@@ -12,13 +12,13 @@ class TCFMambaTrainer(Trainer):
 
     def __init__(self, config, model):
         super().__init__(config, model)
-        self._monitoring_metrics = config.get("monitoring_metrics") or []
-        # 若 config 中指定了保存模型文件名，覆盖默认
-        if "saved_model_file" in config and config["saved_model_file"]:
-            self.saved_model_file = config["saved_model_file"]
-        if config.get("log_tensorboard") and config.get("tensorboard_dir"):
+        fcd = config.final_config_dict
+        self._monitoring_metrics = fcd.get("monitoring_metrics") or []
+        if "saved_model_file" in fcd and fcd["saved_model_file"]:
+            self.saved_model_file = fcd["saved_model_file"]
+        if fcd.get("log_tensorboard") and fcd.get("tensorboard_dir"):
             from torch.utils.tensorboard import SummaryWriter
-            self.tensorboard = SummaryWriter(config["tensorboard_dir"])
+            self.tensorboard = SummaryWriter(fcd["tensorboard_dir"])
 
     def _add_valid_metrics_to_tensorboard(self, epoch_idx, valid_result):
         """将 valid_result 中指定或全部指标写入 TensorBoard。"""
