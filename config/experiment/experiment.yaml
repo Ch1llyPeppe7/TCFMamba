@@ -1,0 +1,15 @@
+# 实验配置（唯一）：日志级别用 state 切换（DEBUG=详细 / INFO=默认 / ERROR=安静）
+# state: ['INFO', 'DEBUG', 'ERROR', 'WARNING', 'CRITICAL']
+state: INFO
+log_tensorboard: True
+log_wandb: False
+show_progress: True
+
+# 用于构建保存目录与 TensorBoard 子目录
+RUN_ID: default
+
+# 写入 TensorBoard 的验证指标（不填则写入 valid_result 中全部）
+monitoring_metrics: ['Recall@5', 'Recall@10', 'Recall@20', 'MRR@5', 'MRR@10', 'MRR@20', 'NDCG@5', 'NDCG@10', 'NDCG@20']
+
+# 超参字典，便于批量实验与命名
+hparams: {}

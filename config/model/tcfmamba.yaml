@@ -3,7 +3,7 @@ model: TCFMamba
 hidden_size: 64
 num_layers: 2
 dropout_prob: 0.2
-loss_type: CE
+loss_type: BPR
 # 当 n_items > ce_full_sort_threshold 时使用 sampled softmax，避免百万级物品 full softmax OOM
 ce_full_sort_threshold: 50000
 ce_neg_sample_num: 1024

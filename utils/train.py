@@ -16,12 +16,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 from recbole.config import Config
 from recbole.data import create_dataset, data_preparation
-from recbole.trainer import Trainer
 from recbole.utils import init_logger, init_seed, set_color, get_model, get_environment
 from logging import getLogger
 
 from tcfmamba import TCFMamba
 from prepare_datasets import prepare_if_needed
+from custom_trainer import TCFMambaTrainer
 
 
 def _clear_dataset_cache(dataset_name, checkpoint_dir="saved"):
@@ -84,13 +84,49 @@ def _patch_recbole_numpy_writable():
     dataset.Dataset._dataframe_to_interaction = _patched
 
 
-def _config_files(model_name, dataset_name, config_path=None, experiment_name="default"):
+def _build_run_name_and_paths(config, model_name):
+    """根据 RUN_ID、dataset、batch、关键超参 构建 run_name 及保存路径，写入 config。"""
+    fcd = config.final_config_dict
+    run_id = (fcd.get("RUN_ID") or "default").strip()
+    dataset = config["dataset"]
+    train_bs = fcd["train_batch_size"] if "train_batch_size" in fcd else 2048
+    eval_bs = fcd["eval_batch_size"] if "eval_batch_size" in fcd else 2048
+    parts = [run_id, dataset, "bs%d" % train_bs, "ebs%d" % eval_bs]
+    if model_name == "TCFMamba":
+        h = fcd.get("hidden_size")
+        L = fcd.get("num_layers")
+        if h is not None and L is not None:
+            parts.append("h%dL%d" % (int(h), int(L)))
+    run_name = "_".join(str(p) for p in parts)
+    run_name = run_name.replace("/", "-").replace(" ", "_")
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    checkpoint_dir = os.path.join(root, "saved", run_name)
+    config.final_config_dict["checkpoint_dir"] = checkpoint_dir
+    config.final_config_dict["dataset_save_path"] = os.path.join(
+        checkpoint_dir, "%s-dataset.pth" % dataset
+    )
+    config.final_config_dict["dataloaders_save_path"] = os.path.join(
+        checkpoint_dir, "%s-for-%s-dataloader.pth" % (dataset, config["model"])
+    )
+    config.final_config_dict["saved_model_file"] = os.path.join(
+        checkpoint_dir, "%s_best.pth" % run_name
+    )
+    if fcd.get("log_tensorboard"):
+        config.final_config_dict["tensorboard_dir"] = os.path.join(
+            root, "log_tensorboard", run_name
+        )
+    if "monitoring_metrics" not in config.final_config_dict:
+        config.final_config_dict["monitoring_metrics"] = []
+    return run_name
+
+
+def _config_files(model_name, dataset_name, config_path=None):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if config_path:
         p = config_path if os.path.isabs(config_path) else os.path.join(root, config_path)
         return [p] if os.path.isfile(p) else []
     files = []
-    exp_yaml = os.path.join(root, "config", "experiment", f"{experiment_name}.yaml")
+    exp_yaml = os.path.join(root, "config", "experiment", "experiment.yaml")
     if os.path.isfile(exp_yaml):
         files.append(exp_yaml)
     dataset_file = {"gowalla": "gowalla", "foursquare_TKY": "foursquare_tky", "foursquare_NYC": "foursquare_nyc"}.get(dataset_name, dataset_name.lower())
@@ -109,7 +145,7 @@ def get_args():
     p.add_argument("--model", required=True)
     p.add_argument("--dataset", required=True)
     p.add_argument("--config", default=None, help="Single config file (optional)")
-    p.add_argument("--experiment", default="default", help="Experiment config name under config/experiment/ (default, debug, quiet)")
+    p.add_argument("--state", default=None, help="RecBole log level: INFO, DEBUG, ERROR, WARNING, CRITICAL (overrides experiment.yaml)")
     p.add_argument("--checkpoint", default=None)
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--learning_rate", type=float, default=None)
@@ -139,11 +175,15 @@ def train(model_name, dataset_name, config_file_list, args):
         config_dict["log_tensorboard"] = True
     if args.wandb:
         config_dict["log_wandb"] = True
+    if args.state is not None:
+        config_dict["state"] = args.state.strip().upper()
 
     if model_name == "TCFMamba":
         config = Config(model=TCFMamba, dataset=dataset_name, config_file_list=config_file_list, config_dict=config_dict)
     else:
         config = Config(model=model_name, dataset=dataset_name, config_file_list=config_file_list, config_dict=config_dict)
+
+    _build_run_name_and_paths(config, model_name)
 
     # RecBole sequential split requires group_by "user" (not "user_id"); clear cache and fix
     ea = config.final_config_dict.get("eval_args")
@@ -158,6 +198,7 @@ def train(model_name, dataset_name, config_file_list, args):
     init_seed(config["seed"], config["reproducibility"])
     init_logger(config)
     logger = getLogger()
+    logger.info("Run name (checkpoint/TB dir): %s" % os.path.basename(config["checkpoint_dir"]))
     logger.info("=" * 50)
     logger.info(f"Training {model_name} on {dataset_name}")
     logger.info("=" * 50)
@@ -173,7 +214,8 @@ def train(model_name, dataset_name, config_file_list, args):
         model = get_model(model_name)(config, train_data.dataset).to(config["device"])
     logger.info(model)
 
-    trainer = Trainer(config, model)
+    TrainerClass = TCFMambaTrainer if model_name == "TCFMamba" else __import__("recbole.trainer", fromlist=["Trainer"]).Trainer
+    trainer = TrainerClass(config, model)
     if args.checkpoint and os.path.exists(args.checkpoint):
         trainer.resume_checkpoint(args.checkpoint)
 
@@ -194,7 +236,7 @@ def main():
     args = get_args()
     _patch_recbole_numpy_writable()
 
-    config_file_list = _config_files(args.model, args.dataset, args.config, args.experiment)
+    config_file_list = _config_files(args.model, args.dataset, args.config)
     if not config_file_list:
         print("[ERROR] No config file(s) found. Use --config or add config/dataset and config/model yaml.")
         sys.exit(1)

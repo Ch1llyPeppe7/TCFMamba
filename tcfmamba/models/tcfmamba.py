@@ -368,7 +368,12 @@ class TCFMamba(SequentialRecommender):
         pos_items = interaction[self.POS_ITEM_ID]
 
         if self.loss_type == "BPR":
-            neg_items = interaction[self.NEG_ITEM_ID]
+            if self.NEG_ITEM_ID in interaction:
+                neg_items = interaction[self.NEG_ITEM_ID]
+            else:
+                # RecBole 未配置 train_neg_sample_args 时在模型内采样 1 个负样本
+                batch_size = pos_items.size(0)
+                neg_items = torch.randint(1, self.n_items, (batch_size,), device=pos_items.device)
             pos_items_emb = self.item_embedding(pos_items)
             neg_items_emb = self.item_embedding(neg_items)
             pos_score = torch.sum(item_output * pos_items_emb, dim=-1)

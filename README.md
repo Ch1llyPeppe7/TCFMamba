@@ -49,8 +49,8 @@ pip install -r requirements.txt && pip install -e .
 # Train (config: config/dataset/*.yaml + config/model/tcfmamba.yaml)
 python utils/train.py --model=TCFMamba --dataset=gowalla
 
-# Options: experiment profile, TensorBoard, rebuild dataset cache
-python utils/train.py --model=TCFMamba --dataset=gowalla --experiment=debug
+# Options: log level (--state DEBUG/ERROR), TensorBoard, rebuild dataset cache
+python utils/train.py --model=TCFMamba --dataset=gowalla --state DEBUG
 python utils/train.py --model=TCFMamba --dataset=gowalla --rebuild-dataset
 ```
 
