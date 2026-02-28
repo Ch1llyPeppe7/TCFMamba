@@ -6,3 +6,8 @@ prompt.md
 *.inter
 *.item
 *.pyc
+dataset/
+saved/
+*.egg-info/
+log/
+log_tensorboard/

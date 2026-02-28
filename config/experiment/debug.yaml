@@ -1,0 +1,6 @@
+# Experiment: debug (verbose console log)
+state: DEBUG
+log_tensorboard: True
+log_wandb: False
+experiment_name: debug
+show_progress: True

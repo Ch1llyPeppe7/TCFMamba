@@ -1,73 +1,32 @@
 """
-Batch experiment runner for TCFMamba.
-
-This script enables running multiple experiments across different datasets
-and configurations with a single command. Results are automatically
-aggregated and saved for easy comparison.
+Batch experiment runner using simplified train.py.
 
 Usage:
-    # Run all experiments (TCFMamba on all datasets)
     python utils/run_experiments.py --all
-
-    # Run specific dataset
-    python utils/run_experiments.py --dataset gowalla
-
-    # Run multiple datasets
-    python utils/run_experiments.py --dataset gowalla foursquare_TKY
-
-    # Run with custom seeds for reproducibility
-    python utils/run_experiments.py --all --seeds 42 2023 2024
-
-    # Run baseline models for comparison
-    python utils/run_experiments.py --all --baselines BERT4Rec GRU4Rec
-
-    # Dry run (show what would be executed)
-    python utils/run_experiments.py --all --dry-run
-
-Results are saved to:
-    - results/experiments_TIMESTAMP/ (individual results)
-    - results/summary_TIMESTAMP.csv (aggregated results)
-    - results/summary_TIMESTAMP.md (formatted report)
+    python utils/run_experiments.py --dataset gowalla --models TCFMamba BERT4Rec
+    python utils/run_experiments.py --all --seeds 42 2023
 """
 
 import os
 import sys
 import argparse
 import json
-import csv
 import subprocess
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import List, Dict, Any
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 # Experiment configurations
 DATASETS = ["gowalla", "foursquare_TKY", "foursquare_NYC"]
 
+# TCFMamba: no single config file (train.py uses config/dataset/*.yaml + config/model/tcfmamba.yaml)
+# Others: optional baseline config path
 CONFIG_MAP = {
-    "TCFMamba": {
-        "gowalla": "config/tcfmamba_gowalla.yaml",
-        "foursquare_TKY": "config/tcfmamba_tky.yaml",
-        "foursquare_NYC": "config/tcfmamba_nyc.yaml",
-    },
-    "BERT4Rec": {
-        "gowalla": "config/baseline/bert4rec_gowalla.yaml",
-        "foursquare_TKY": "config/baseline/bert4rec_tky.yaml",
-        "foursquare_NYC": "config/baseline/bert4rec_nyc.yaml",
-    },
-    "GRU4Rec": {
-        "gowalla": "config/baseline/gru4rec_gowalla.yaml",
-        "foursquare_TKY": "config/baseline/gru4rec_tky.yaml",
-        "foursquare_NYC": "config/baseline/gru4rec_nyc.yaml",
-    },
-    "SRGNN": {
-        "gowalla": "config/baseline/srgnn_gowalla.yaml",
-        "foursquare_TKY": "config/baseline/srgnn_tky.yaml",
-        "foursquare_NYC": "config/baseline/srgnn_nyc.yaml",
-    },
+    "TCFMamba": { "gowalla": None, "foursquare_TKY": None, "foursquare_NYC": None },
+    "BERT4Rec": { "gowalla": "config/BERT4Rec.yaml", "foursquare_TKY": "config/BERT4Rec.yaml", "foursquare_NYC": "config/BERT4Rec.yaml" },
+    "GRU4Rec": { "gowalla": "config/GRU4Rec.yaml", "foursquare_TKY": "config/GRU4Rec.yaml", "foursquare_NYC": "config/GRU4Rec.yaml" },
+    "SRGNN": { "gowalla": "config/SRGNN.yaml", "foursquare_TKY": "config/SRGNN.yaml", "foursquare_NYC": "config/SRGNN.yaml" },
 }
 
 
@@ -179,16 +138,9 @@ def generate_experiments(args) -> List[Dict[str, Any]]:
     for model in models:
         for dataset in datasets:
             for seed in args.seeds:
-                # Get config file
-                if model in CONFIG_MAP and dataset in CONFIG_MAP[model]:
-                    config_file = CONFIG_MAP[model][dataset]
-                else:
-                    # Fallback: construct config path
-                    config_file = f"config/{model.lower()}_{dataset}.yaml"
-
-                # Skip if config doesn't exist
-                if not os.path.exists(config_file):
-                    print(f"Warning: Config file not found: {config_file}")
+                config_file = CONFIG_MAP.get(model, {}).get(dataset) if model in CONFIG_MAP else f"config/{model.lower()}.yaml"
+                if config_file is not None and not os.path.exists(config_file):
+                    print(f"Warning: Config not found: {config_file}")
                     continue
 
                 exp = {
@@ -223,16 +175,16 @@ def run_single_experiment(exp: Dict[str, Any], args, output_dir: str) -> Dict[st
     print(f"Seed: {exp['seed']}")
     print(f"Config: {exp['config']}")
 
-    # Build command
     cmd = [
         sys.executable,
-        "scripts/train.py",
+        "utils/train.py",
         "--model", exp["model"],
         "--dataset", exp["dataset"],
-        "--config", exp["config"],
         "--seed", str(exp["seed"]),
         "--gpu_id", args.gpu_id,
     ]
+    if exp.get("config") is not None:
+        cmd.extend(["--config", exp["config"]])
 
     # Add output directory
     exp_output_dir = os.path.join(output_dir, exp["name"])
@@ -314,76 +266,12 @@ def parse_experiment_output(output: str) -> Dict[str, Any]:
 
 
 def save_summary(all_results: List[Dict], output_dir: str, timestamp: str):
-    """Save experiment summary in multiple formats."""
-    # Create summary directory
-    summary_dir = os.path.join(output_dir, f"summary_{timestamp}")
-    os.makedirs(summary_dir, exist_ok=True)
-
-    # Save as JSON
-    json_file = os.path.join(summary_dir, "results.json")
-    with open(json_file, "w") as f:
+    """Save experiment summary as JSON."""
+    summary_file = os.path.join(output_dir, f"results_{timestamp}.json")
+    with open(summary_file, "w") as f:
         json.dump(all_results, f, indent=2)
-
-    # Save as CSV
-    csv_file = os.path.join(summary_dir, "results.csv")
-    if all_results:
-        # Get all unique keys
-        keys = set()
-        for r in all_results:
-            keys.update(r.keys())
-        keys = sorted(keys)
-
-        with open(csv_file, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=keys)
-            writer.writeheader()
-            for r in all_results:
-                writer.writerow(r)
-
-    # Generate Markdown report
-    md_file = os.path.join(summary_dir, "report.md")
-    generate_markdown_report(all_results, md_file, timestamp)
-
-    print(f"\nSummary saved to: {summary_dir}")
-    return summary_dir
-
-
-def generate_markdown_report(results: List[Dict], output_file: str, timestamp: str):
-    """Generate a formatted Markdown report."""
-    with open(output_file, "w") as f:
-        f.write(f"# TCFMamba Experiment Results\n\n")
-        f.write(f"Generated: {timestamp}\n\n")
-
-        # Group by model and dataset
-        from collections import defaultdict
-        grouped = defaultdict(lambda: defaultdict(list))
-
-        for r in results:
-            if r.get("status") == "success":
-                model = r.get("name", "").split("_")[0]
-                dataset = r.get("name", "").split("_")[1] if "_" in r.get("name", "") else "unknown"
-                grouped[model][dataset].append(r)
-
-        # Summary table
-        f.write("## Summary\n\n")
-        f.write("| Model | Dataset | Status | NDCG@10 | Recall@10 | Time (s) |\n")
-        f.write("|-------|---------|--------|---------|-----------|----------|\n")
-
-        for model in sorted(grouped.keys()):
-            for dataset in sorted(grouped[model].keys()):
-                for r in grouped[model][dataset]:
-                    ndcg = r.get("NDCG@10", r.get("test_result", {}).get("NDCG@10", "N/A"))
-                    recall = r.get("Recall@10", r.get("test_result", {}).get("Recall@10", "N/A"))
-                    time_val = r.get("time", "N/A")
-                    status = "✓" if r.get("status") == "success" else "✗"
-
-                    f.write(f"| {model} | {dataset} | {status} | {ndcg} | {recall} | {time_val:.1f} |\n")
-
-        f.write("\n## Detailed Results\n\n")
-        for r in results:
-            f.write(f"### {r.get('name', 'Unknown')}\n\n")
-            f.write(f"```json\n")
-            f.write(json.dumps(r, indent=2))
-            f.write(f"\n```\n\n")
+    print(f"\nResults saved to: {summary_file}")
+    return summary_file
 
 
 def main():

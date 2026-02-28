@@ -1,0 +1,6 @@
+# Experiment: quiet (errors only)
+state: ERROR
+log_tensorboard: False
+log_wandb: False
+experiment_name: quiet
+show_progress: True

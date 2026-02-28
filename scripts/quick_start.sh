@@ -18,14 +18,8 @@ fi
 # Function to train TCFMamba
 train_tcfmamba() {
     local dataset=$1
-    local config=$2
-    
     echo "Training TCFMamba on ${dataset}..."
-    python utils/train.py \
-        --model=TCFMamba \
-        --dataset=${dataset} \
-        --config=${config} \
-        --epochs=100
+    python utils/train.py --model=TCFMamba --dataset=${dataset} --epochs=100
 }
 
 # Function to run all experiments
@@ -37,24 +31,20 @@ run_all() {
 # Parse command line arguments
 case "$1" in
     gowalla)
-        train_tcfmamba "gowalla" "config/tcfmamba_gowalla.yaml"
+        train_tcfmamba "gowalla"
         ;;
     tky|foursquare_TKY)
-        train_tcfmamba "foursquare_TKY" "config/tcfmamba_tky.yaml"
+        train_tcfmamba "foursquare_TKY"
         ;;
     nyc|foursquare_NYC)
-        train_tcfmamba "foursquare_NYC" "config/tcfmamba_nyc.yaml"
+        train_tcfmamba "foursquare_NYC"
         ;;
     all)
         run_all
         ;;
     test)
         echo "Running quick test (10 epochs on gowalla)..."
-        python utils/train.py \
-            --model=TCFMamba \
-            --dataset=gowalla \
-            --config=config/tcfmamba_gowalla.yaml \
-            --epochs=10
+        python utils/train.py --model=TCFMamba --dataset=gowalla --epochs=10
         ;;
     help|--help|-h)
         echo "Usage: ./scripts/quick_start.sh [command]"

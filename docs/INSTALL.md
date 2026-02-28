@@ -163,7 +163,7 @@ docker run --gpus all -it -v $(pwd)/dataset:/workspace/dataset tcfmamba
 ## Next Steps
 
 1. Prepare datasets: `python utils/prepare_datasets.py --verify`
-2. Quick test: `python utils/train.py --model=TCFMamba --dataset=gowalla --config=config/tcfmamba_gowalla.yaml --epochs=10`
+2. Quick test: `python utils/train.py --model=TCFMamba --dataset=gowalla --epochs=10`
 3. Full training: See [README.md](README.md)
 
 ## Getting Help

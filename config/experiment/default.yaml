@@ -1,0 +1,7 @@
+# Experiment: default (log level, TensorBoard, run meta)
+# RecBole log level: state in ['INFO','DEBUG','ERROR','WARNING','CRITICAL']
+state: INFO
+log_tensorboard: True
+log_wandb: False
+experiment_name: default
+show_progress: True

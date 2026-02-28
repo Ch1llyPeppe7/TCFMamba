@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import math
+import numpy as np
 from recbole.model.abstract_recommender import SequentialRecommender
 from recbole.model.loss import BPRLoss
 from recbole.utils import InputType
@@ -43,8 +44,6 @@ class TCFMamba(SequentialRecommender):
         expand (int): Mamba expansion factor
     """
 
-    input_type = InputType.SEQ
-
     def __init__(self, config, dataset):
         super(TCFMamba, self).__init__(config, dataset)
 
@@ -60,13 +59,13 @@ class TCFMamba(SequentialRecommender):
         self.expand = config["expand"]
 
         # Time field configuration
-        self.TIME_FIELD = config.get("TIME_FIELD", "timestamp")
-        self.TIME_SEQ_FIELD = self.TIME_FIELD + config.get("LIST_SUFFIX", "_list")
-        self.TIME_TERM = config.get("Term", "day")  # 'day', 'week', or 'month'
+        self.TIME_FIELD = config["TIME_FIELD"] if "TIME_FIELD" in config else "timestamp"
+        self.TIME_SEQ_FIELD = self.TIME_FIELD + (config["LIST_SUFFIX"] if "LIST_SUFFIX" in config else "_list")
+        self.TIME_TERM = config["Term"] if "Term" in config else "day"  # 'day', 'week', or 'month'
 
         # Location field configuration (configurable)
-        self.LAT_FIELD = config.get("LATITUDE_FIELD", "latitude")
-        self.LON_FIELD = config.get("LONGITUDE_FIELD", "longitude")
+        self.LAT_FIELD = config["LATITUDE_FIELD"] if "LATITUDE_FIELD" in config else "latitude"
+        self.LON_FIELD = config["LONGITUDE_FIELD"] if "LONGITUDE_FIELD" in config else "longitude"
 
         # Setup location encoding
         self.locdim = self.hidden_size
@@ -92,6 +91,10 @@ class TCFMamba(SequentialRecommender):
                 num_layers=self.num_layers,
             ) for _ in range(self.num_layers)
         ])
+
+        # CE 在大物品集上用 sampled softmax，避免 OOM（full softmax 需 [batch, n_items]）
+        self.ce_full_sort_threshold = config["ce_full_sort_threshold"] if "ce_full_sort_threshold" in config else 50000
+        self.ce_neg_sample_num = config["ce_neg_sample_num"] if "ce_neg_sample_num" in config else 1024
 
         # Loss function
         if self.loss_type == "BPR":
@@ -153,43 +156,51 @@ class TCFMamba(SequentialRecommender):
         lat_field = self.LAT_FIELD
         lon_field = self.LON_FIELD
 
-        # Extract from item_feat
-        if hasattr(dataset.item_feat, 'interactions'):
-            # RecBole DataFrame format
-            if lat_field in dataset.item_feat.columns and lon_field in dataset.item_feat.columns:
-                latitude = torch.tensor(dataset.item_feat[lat_field].values, dtype=torch.float32)
-                longitude = torch.tensor(dataset.item_feat[lon_field].values, dtype=torch.float32)
-            else:
-                # Try alternate field names
-                alt_lat_fields = ['latitude', 'lat', 'Latitude', 'LAT']
-                alt_lon_fields = ['longitude', 'lon', 'lng', 'Longitude', 'LON', 'LNG']
+        # Extract from item_feat (DataFrame or Interaction)
+        feat = dataset.item_feat
+        alt_lat = [lat_field, 'latitude', 'latitude:float', 'lat', 'Latitude', 'LAT']
+        alt_lon = [lon_field, 'longitude', 'longitude:float', 'lon', 'lng', 'Longitude', 'LON', 'LNG']
 
-                lat_field_found = None
-                lon_field_found = None
+        def _to_tensor(v):
+            if v is None or callable(v):
+                return None
+            if isinstance(v, torch.Tensor):
+                return v.float()
+            arr = getattr(v, 'values', None)
+            if arr is not None and not callable(arr):
+                return torch.tensor(arr, dtype=torch.float32)
+            if hasattr(v, 'to_numpy'):
+                return torch.tensor(v.to_numpy(), dtype=torch.float32)
+            try:
+                return torch.tensor(np.asarray(v, dtype=np.float32))
+            except (TypeError, ValueError):
+                return None
 
-                for f in alt_lat_fields:
-                    if f in dataset.item_feat.columns:
-                        lat_field_found = f
-                        break
+        def _resolve(fields):
+            if hasattr(feat, 'columns'):
+                for f in fields:
+                    if f in feat.columns:
+                        v = feat[f]
+                        t = _to_tensor(v)
+                        if t is not None:
+                            return t
+            if hasattr(feat, 'interaction'):
+                for f in fields:
+                    if f in feat:
+                        v = feat[f]
+                        t = _to_tensor(v)
+                        if t is not None:
+                            return t
+            return None
 
-                for f in alt_lon_fields:
-                    if f in dataset.item_feat.columns:
-                        lon_field_found = f
-                        break
-
-                if lat_field_found is None or lon_field_found is None:
-                    raise ValueError(
-                        f"Cannot find latitude/longitude fields in dataset. "
-                        f"Available columns: {list(dataset.item_feat.columns)}. "
-                        f"Please set LATITUDE_FIELD and LONGITUDE_FIELD in config."
-                    )
-
-                latitude = torch.tensor(dataset.item_feat[lat_field_found].values, dtype=torch.float32)
-                longitude = torch.tensor(dataset.item_feat[lon_field_found].values, dtype=torch.float32)
-        else:
-            # Direct tensor access
-            latitude = dataset.item_feat.get(lat_field, dataset.item_feat.get('latitude', dataset.item_feat.get('lat')))
-            longitude = dataset.item_feat.get(lon_field, dataset.item_feat.get('longitude', dataset.item_feat.get('lon')))
+        latitude = _resolve(alt_lat)
+        longitude = _resolve(alt_lon)
+        if latitude is None or longitude is None:
+            avail = list(feat.columns) if hasattr(feat, 'columns') else list(getattr(feat, 'interaction', {}).keys())
+            raise ValueError(
+                f"Cannot find latitude/longitude in item_feat. Available: {avail}. "
+                f"Set LATITUDE_FIELD and LONGITUDE_FIELD in config."
+            )
 
         # Apply spherical transformation
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -364,9 +375,21 @@ class TCFMamba(SequentialRecommender):
             neg_score = torch.sum(item_output * neg_items_emb, dim=-1)
             loss = self.loss_fct(pos_score, neg_score)
         else:  # CE loss
-            test_item_emb = self.item_embedding()
-            logits = torch.matmul(item_output, test_item_emb.transpose(0, 1))
-            loss = self.loss_fct(logits, pos_items)
+            if self.n_items > self.ce_full_sort_threshold:
+                # Sampled softmax：只对 pos + 负采样算 logits，避免 [batch, n_items] 的 OOM
+                batch_size = item_output.size(0)
+                num_neg = min(self.ce_neg_sample_num, self.n_items - 1)
+                neg_idx = torch.randint(1, self.n_items, (batch_size, num_neg), device=item_output.device)
+                pos_emb = self.item_embedding(pos_items)
+                neg_emb = self.item_embedding(neg_idx)
+                candidates = torch.cat([pos_emb.unsqueeze(1), neg_emb], dim=1)
+                logits = torch.bmm(item_output.unsqueeze(1), candidates.transpose(1, 2)).squeeze(1)
+                targets = torch.zeros(batch_size, dtype=torch.long, device=item_output.device)
+                loss = self.loss_fct(logits, targets)
+            else:
+                test_item_emb = self.item_embedding()
+                logits = torch.matmul(item_output, test_item_emb.transpose(0, 1))
+                loss = self.loss_fct(logits, pos_items)
 
         return loss
 
