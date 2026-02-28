@@ -38,20 +38,23 @@ from custom_trainer import TCFMambaTrainer
 def _clear_dataset_cache(dataset_name, checkpoint_dir="saved"):
     """Remove cached dataset and dataloader pth so next run rebuilds with current config."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    saved = os.path.join(root, checkpoint_dir)
-    if not os.path.isdir(saved):
+    base = checkpoint_dir if os.path.isabs(checkpoint_dir) else os.path.join(root, checkpoint_dir)
+    if not os.path.isdir(base):
         return
     removed = []
-    for f in os.listdir(saved):
-        if f.startswith(dataset_name + "-") and (f.endswith(".pth") or "-dataloader.pth" in f):
-            p = os.path.join(saved, f)
-            try:
-                os.remove(p)
-                removed.append(f)
-            except OSError:
-                pass
+    for search_dir in [base, os.path.join(base, "data")]:
+        if not os.path.isdir(search_dir):
+            continue
+        for f in os.listdir(search_dir):
+            if f.startswith(dataset_name + "-") and (f.endswith(".pth") or "-dataloader.pth" in f):
+                p = os.path.join(search_dir, f)
+                try:
+                    os.remove(p)
+                    removed.append(os.path.relpath(p, base))
+                except OSError:
+                    pass
     if removed:
-        print(f"[CACHE] Cleared {checkpoint_dir}/ for rebuild: {removed}")
+        print(f"[CACHE] Cleared {checkpoint_dir} for rebuild: {removed}")
 
 
 def _patch_recbole_numpy_writable():
@@ -118,15 +121,19 @@ def _build_run_name_and_paths(config, model_name):
     run_name = run_name.replace("/", "-").replace(" ", "_")
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     checkpoint_dir = os.path.join(root, "saved", run_name)
+    data_dir = os.path.join(checkpoint_dir, "data")
+    model_dir = os.path.join(checkpoint_dir, "model")
+    os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(model_dir, exist_ok=True)
     config.final_config_dict["checkpoint_dir"] = checkpoint_dir
     config.final_config_dict["dataset_save_path"] = os.path.join(
-        checkpoint_dir, "%s-dataset.pth" % dataset
+        data_dir, "%s-dataset.pth" % dataset
     )
     config.final_config_dict["dataloaders_save_path"] = os.path.join(
-        checkpoint_dir, "%s-for-%s-dataloader.pth" % (dataset, config["model"])
+        data_dir, "%s-for-%s-dataloader.pth" % (dataset, config["model"])
     )
     config.final_config_dict["saved_model_file"] = os.path.join(
-        checkpoint_dir, "%s_best.pth" % run_name
+        model_dir, "%s_best.pth" % run_name
     )
     if fcd.get("log_tensorboard"):
         config.final_config_dict["tensorboard_dir"] = os.path.join(

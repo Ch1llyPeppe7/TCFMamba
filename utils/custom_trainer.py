@@ -2,6 +2,7 @@
 Custom Trainer: 扩展 TensorBoard 记录（所有验证指标）、按参数规范保存路径与模型文件名。
 """
 import os
+import shutil
 from recbole.trainer import Trainer
 from recbole.utils import set_color, dict2str, early_stopping
 from time import time
@@ -18,6 +19,13 @@ class TCFMambaTrainer(Trainer):
             self.saved_model_file = fcd["saved_model_file"]
         if fcd.get("log_tensorboard") and fcd.get("tensorboard_dir"):
             from torch.utils.tensorboard import SummaryWriter
+            # 父类已用 get_tensorboard(logger) 创建了带日期/随机名的目录，关闭并删掉，只保留 run_name 目录
+            if getattr(self.tensorboard, "log_dir", None) and os.path.isdir(self.tensorboard.log_dir):
+                self.tensorboard.close()
+                try:
+                    shutil.rmtree(self.tensorboard.log_dir, ignore_errors=True)
+                except Exception:
+                    pass
             self.tensorboard = SummaryWriter(fcd["tensorboard_dir"])
 
     def _add_valid_metrics_to_tensorboard(self, epoch_idx, valid_result):
