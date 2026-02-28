@@ -29,15 +29,32 @@ class TCFMambaTrainer(Trainer):
             self.tensorboard = SummaryWriter(fcd["tensorboard_dir"])
 
     def _add_valid_metrics_to_tensorboard(self, epoch_idx, valid_result):
-        """将 valid_result 中指定或全部指标写入 TensorBoard。"""
+        """将 valid_result 中指定或全部指标写入 TensorBoard。RecBole 返回的 key 为小写（如 recall@10），与 config 中大小写做兼容匹配。"""
+        valid_lower = {str(k).lower(): (k, v) for k, v in valid_result.items() if isinstance(v, (int, float))}
         if not self._monitoring_metrics:
-            for k, v in valid_result.items():
-                if isinstance(v, (int, float)):
-                    self.tensorboard.add_scalar("valid/%s" % k, v, epoch_idx)
+            for _, (k, v) in valid_lower.items():
+                self.tensorboard.add_scalar("valid/%s" % k, v, epoch_idx)
         else:
-            for k in self._monitoring_metrics:
-                if k in valid_result and isinstance(valid_result[k], (int, float)):
-                    self.tensorboard.add_scalar("valid/%s" % k, valid_result[k], epoch_idx)
+            for name in self._monitoring_metrics:
+                key = str(name).lower()
+                if key in valid_lower:
+                    _, v = valid_lower[key]
+                    self.tensorboard.add_scalar("valid/%s" % name, v, epoch_idx)
+
+    def add_test_metrics_to_tensorboard(self, test_result, step=0):
+        """训练结束后将 test_result 写入 TensorBoard，便于与 valid 曲线对比。"""
+        if not getattr(self, "tensorboard", None):
+            return
+        test_lower = {str(k).lower(): (k, v) for k, v in test_result.items() if isinstance(v, (int, float))}
+        if not self._monitoring_metrics:
+            for _, (k, v) in test_lower.items():
+                self.tensorboard.add_scalar("test/%s" % k, v, step)
+        else:
+            for name in self._monitoring_metrics:
+                key = str(name).lower()
+                if key in test_lower:
+                    _, v = test_lower[key]
+                    self.tensorboard.add_scalar("test/%s" % name, v, step)
 
     def fit(
         self,
@@ -138,3 +155,28 @@ class TCFMambaTrainer(Trainer):
 
         self._add_hparam_to_tensorboard(self.best_valid_score)
         return self.best_valid_score, self.best_valid_result
+
+    def _add_hparam_to_tensorboard(self, best_valid_score):
+        """将超参以 add_text 写入当前 run，避免 add_hparams 产生额外子目录导致 TB 出现两个 run。
+        超参从 final_config_dict 收集（含 dataset/model 配置），不依赖 experiment 里 hparams 是否为空。
+        """
+        if not getattr(self, "tensorboard", None):
+            return
+        fcd = self.config.final_config_dict
+        unrecorded = {"model", "dataset", "config_files", "device", "config_files", "checkpoint_dir",
+                      "dataset_save_path", "dataloaders_save_path", "saved_model_file", "tensorboard_dir",
+                      "monitoring_metrics", "RUN_ID", "state", "log_wandb", "log_tensorboard", "show_progress"}
+        if hasattr(self.config, "parameters") and self.config.parameters:
+            for params in self.config.parameters.values():
+                unrecorded.update(params)
+        hparam_dict = {}
+        for k, v in fcd.items():
+            if k in unrecorded or v is None:
+                continue
+            if isinstance(v, (bool, str, float, int)):
+                hparam_dict[k] = v
+            else:
+                hparam_dict[k] = str(v)
+        from recbole.utils import dict2str
+        table = "best_valid_score: %s\n\nConfig (partial):\n%s" % (best_valid_score, dict2str(hparam_dict))
+        self.tensorboard.add_text("config/hparams", table, 0)

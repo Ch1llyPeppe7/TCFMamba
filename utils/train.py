@@ -98,6 +98,47 @@ def _patch_recbole_numpy_writable():
     dataset.Dataset._dataframe_to_interaction = _patched
 
 
+def _patch_recbole_save_paths():
+    """让 RecBole 保存 dataset/dataloader 时使用 config 中的 dataset_save_path / dataloaders_save_path，
+    从而写入 saved/run_name/data/ 而非 checkpoint_dir 根目录。
+    """
+    import pickle
+    from recbole.data.dataset import dataset
+    from recbole.data import utils as data_utils
+    from recbole.utils import ensure_dir, set_color
+
+    _orig_dataset_save = dataset.Dataset.save
+    def _patched_dataset_save(self):
+        path = self.config["dataset_save_path"]
+        if path:
+            ensure_dir(os.path.dirname(path))
+            self.logger.info(set_color("Saving filtered dataset into ", "pink") + "[%s]" % path)
+            with open(path, "wb") as f:
+                pickle.dump(self, f)
+        else:
+            _orig_dataset_save(self)
+
+    _orig_save_dataloaders = data_utils.save_split_dataloaders
+    def _patched_save_dataloaders(config, dataloaders):
+        path = config["dataloaders_save_path"]
+        if path:
+            ensure_dir(os.path.dirname(path))
+            getLogger().info(set_color("Saving split dataloaders into", "pink") + ": [%s]" % path)
+            serial = []
+            for dataloader in dataloaders:
+                generator_state = dataloader.generator.get_state()
+                dataloader.generator = None
+                dataloader.sampler.generator = None
+                serial.append((dataloader, generator_state))
+            with open(path, "wb") as f:
+                pickle.dump(serial, f)
+        else:
+            _orig_save_dataloaders(config, dataloaders)
+
+    dataset.Dataset.save = _patched_dataset_save
+    data_utils.save_split_dataloaders = _patched_save_dataloaders
+
+
 def _build_run_name_and_paths(config, model_name):
     """根据数据集、模型、超参构建 run_name（用于 checkpoint 与 TensorBoard 显示），写入 config。"""
     fcd = config.final_config_dict
@@ -136,8 +177,9 @@ def _build_run_name_and_paths(config, model_name):
         model_dir, "%s_best.pth" % run_name
     )
     if fcd.get("log_tensorboard"):
+        # 使用 run_name/run_name 两层，这样无论用 tensorboard --logdir=log_tensorboard 还是 --logdir=log_tensorboard/run_name，run 名都显示为 run_name（不会变成 "."）
         config.final_config_dict["tensorboard_dir"] = os.path.join(
-            root, "log_tensorboard", run_name
+            root, "log_tensorboard", run_name, run_name
         )
     if "monitoring_metrics" not in config.final_config_dict:
         config.final_config_dict["monitoring_metrics"] = []
@@ -150,9 +192,11 @@ def _config_files(model_name, dataset_name, config_path=None):
         p = config_path if os.path.isabs(config_path) else os.path.join(root, config_path)
         return [p] if os.path.isfile(p) else []
     files = []
-    exp_yaml = os.path.join(root, "config", "experiment", "experiment.yaml")
-    if os.path.isfile(exp_yaml):
-        files.append(exp_yaml)
+    # 实验配置：default 与 experiment 都加载，后者覆盖前者，保证 monitoring_metrics 等生效
+    for name in ("default.yaml", "experiment.yaml"):
+        exp_yaml = os.path.join(root, "config", "experiment", name)
+        if os.path.isfile(exp_yaml):
+            files.append(exp_yaml)
     dataset_file = {"gowalla": "gowalla", "foursquare_TKY": "foursquare_tky", "foursquare_NYC": "foursquare_nyc"}.get(dataset_name, dataset_name.lower())
     dataset_yaml = os.path.join(root, "config", "dataset", f"{dataset_file}.yaml")
     if os.path.isfile(dataset_yaml):
@@ -210,6 +254,7 @@ def train(model_name, dataset_name, config_file_list, args):
         config = Config(model=model_name, dataset=dataset_name, config_file_list=config_file_list, config_dict=config_dict)
 
     _build_run_name_and_paths(config, model_name)
+    _patch_recbole_save_paths()
 
     # RecBole sequential split requires group_by "user" (not "user_id"); clear cache and fix
     ea = config.final_config_dict.get("eval_args")
@@ -225,6 +270,9 @@ def train(model_name, dataset_name, config_file_list, args):
     init_logger(config)
     logger = getLogger()
     logger.info("Run name (checkpoint/TB dir): %s" % os.path.basename(config["checkpoint_dir"]))
+    if config.final_config_dict.get("log_tensorboard") and config.final_config_dict.get("tensorboard_dir"):
+        tb_parent = os.path.dirname(os.path.dirname(config["tensorboard_dir"]))
+        logger.info("TensorBoard (run 名=%s): tensorboard --logdir=%s" % (os.path.basename(config["checkpoint_dir"]), tb_parent))
     logger.info("=" * 50)
     logger.info(f"Training {model_name} on {dataset_name}")
     logger.info("=" * 50)
@@ -256,6 +304,8 @@ def train(model_name, dataset_name, config_file_list, args):
     logger.info("Starting training...")
     best_valid_score, best_valid_result = trainer.fit(train_data, valid_data, verbose=True, saved=True, show_progress=True)
     test_result = trainer.evaluate(test_data, show_progress=False)
+    if hasattr(trainer, "add_test_metrics_to_tensorboard"):
+        trainer.add_test_metrics_to_tensorboard(test_result)
 
     logger.info("=" * 50)
     logger.info(set_color("Best Validation", "yellow") + f": {best_valid_result}")

@@ -14,4 +14,3 @@ monitoring_metrics: ['Recall@5', 'Recall@10', 'Recall@20', 'MRR@5', 'MRR@10', 'M
 
 # 超参字典，便于批量实验与命名（可被 run 命名引用）
 hparams: {}
-gpu_id: '0,1'
